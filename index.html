@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco Route Planner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            @apply bg-gray-100; /* Lighter background for the whole page */
+        }
+        /* Ensure the map container has a defined height */
+        #map {
+            height: 500px; /* Increased height for better visibility */
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-lg */
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Custom styles for mode cards to match the new aesthetic */
+        .card-eco-green { @apply bg-green-50 border-green-200; }
+        .card-eco-blue { @apply bg-blue-50 border-blue-200; }
+        .card-eco-purple { @apply bg-purple-50 border-purple-200; }
+        .card-eco-red { @apply bg-red-50 border-red-200; }
+
+
+        .ring-highlight {
+            box-shadow: 0 0 0 4px #22c55e, 0 0 0 6px #fff; /* green-500 ring with white offset */
+        }
+    </style>
+
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+
+    <!-- Your React App Script -->
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'https://esm.sh/react@18.2.0';
+        import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+
+
+        // --- Custom UI Components (simplified for direct browser execution) ---
+        // These components mimic shadcn/ui components for a consistent look.
+        const Card = ({ className, ...props }) => (
+          React.createElement('div', { className: `rounded-xl border bg-white text-gray-900 shadow-md ${className}`, ...props })
+        );
+
+
+        const CardHeader = ({ className, ...props }) => (
+          React.createElement('div', { className: `flex flex-col space-y-1.5 p-6 ${className}`, ...props })
+        );
+
+
+        const CardTitle = ({ className, ...props }) => (
+          React.createElement('h3', { className: `text-2xl font-semibold leading-none tracking-tight ${className}`, ...props })
+        );
+
+
+        const CardContent = ({ className, ...props }) => (
+          React.createElement('div', { className: `p-6 pt-0 ${className}`, ...props })
+        );
+
+
+        const Button = ({ className, variant = 'default', size = 'default', disabled, ...props }) => {
+          const baseClasses = "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+          const variantClasses = {
+            default: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm",
+            outline: "border border-gray-300 bg-white hover:bg-gray-100 hover:text-gray-900 shadow-sm",
+            ghost: "hover:bg-gray-100 hover:text-gray-900",
+            destructive: "bg-red-500 text-white hover:bg-red-600 shadow-sm",
+            eco: "bg-green-600 text-white hover:bg-green-700 shadow-md",
+          };
+          const sizeClasses = {
+            default: "h-10 px-4 py-2",
+            sm: "h-9 rounded-md px-3",
+            lg: "h-11 rounded-md px-8",
+            icon: "h-10 w-10",
+          };
+          return (
+            React.createElement('button', {
+              className: `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`,
+              disabled: disabled,
+              ...props
+            })
+          );
+        };
+
+
+        const Input = ({ className, type = 'text', ...props }) => (
+          React.createElement('input', {
+            type: type,
+            className: `flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm ${className}`,
+            ...props
+          })
+        );
+
+
+        const Label = ({ className, ...props }) => (
+          React.createElement('label', { className: `text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`, ...props })
+        );
+        // --- End Custom UI Components ---
+
+
+        // !! IMPORTANT: Replace with your actual GraphHopper API Key !!
+        // For production, this should be stored securely on a backend server, not directly in client-side code.
+        const GRAPHHOPPER_API_KEY = 'd733cb10-05ad-452c-bb97-63d5bcd0f98f'; // <--- PASTE YOUR API KEY HERE
+
+
+        // Helper function to decode GraphHopper's polyline format
+        // From: https://github.com/mapbox/polyline/blob/master/src/polyline.js
+        function decodePolyline(str, precision = 5) {
+          let index = 0,
+            lat = 0,
+            lng = 0,
+            coordinates = [],
+            shift = 0,
+            result = 0,
+            byte = null,
+            latitude_change,
+            longitude_change;
+
+
+          const factor = Math.pow(10, precision);
+
+
+          while (index < str.length) {
+            byte = null;
+            shift = 0;
+            result = 0;
+            do {
+              byte = str.charCodeAt(index++) - 63;
+              result |= (byte & 0x1f) << shift;
+              shift += 5;
+            } while (byte >= 0x20);
+            latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lat += latitude_change;
+
+
+            shift = 0;
+            result = 0;
+            do {
+              byte = str.charCodeAt(index++) - 63;
+              result |= (byte & 0x1f) << shift;
+              shift += 5;
+            } while (byte >= 0x20);
+            longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+            lng += longitude_change;
+
+
+            const newLatLng = {
+              lat: lat / factor,
+              lng: lng / factor
+            };
+            coordinates.push(newLatLng);
+          }
+          return coordinates;
+        }
+
+
+        // Helper function to geocode an address string to LatLng using GraphHopper Geocoding API
+        const geocodeAddress = async (address) => {
+            if (!GRAPHHOPPER_API_KEY || GRAPHHOPPER_API_KEY === 'YOUR_GRAPHHOPPER_API_KEY') {
+                throw new Error('GraphHopper API Key is not set for geocoding.');
+            }
+            const encodedAddress = encodeURIComponent(address);
+            const geocodingUrl = `https://graphhopper.com/api/1/geocode?q=${encodedAddress}&locale=en&limit=1&key=${GRAPHHOPPER_API_KEY}`;
+
+
+            try {
+                const response = await fetch(geocodingUrl);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('GraphHopper Geocoding API Error:', errorData);
+                    throw new Error(errorData.message || 'Failed to geocode address.');
+                }
+                const data = await response.json();
+                if (data.hits && data.hits.length > 0) {
+                    return { lat: data.hits[0].point.lat, lng: data.hits[0].point.lng };
+                } else {
+                    return null; // No results found
+                }
+            } catch (error) {
+                console.error('Error in geocodeAddress:', error);
+                throw error;
+            }
+        };
+
+
+        // Main EcoRoutePlanner component
+        function App() {
+          const [startLocation, setStartLocation] = useState('');
+          const [endLocation, setEndLocation] = useState('');
+          const [waypoints, setWaypoints] = useState([]); // Array of { id, location, coords }
+          const [startCoords, setStartCoords] = useState(null);
+          const [endCoords, setEndCoords] = useState(null);
+          const [waypointCoords, setWaypointCoords] = useState([]); // Array of {lat, lng} for waypoints
+          const [distance, setDistance] = useState(null);
+          const [drivingDuration, setDrivingDuration] = useState(null);
+          const [results, setResults] = useState([]);
+          const [isCalculating, setIsCalculating] = useState(false);
+          const [error, setError] = useState(null);
+          const [mapInitialized, setMapInitialized] = useState(false);
+          const [evMode, setEvMode] = useState(false);
+          const [selectedVehicleType, setSelectedVehicleType] = useState('gasoline');
+          const [ecoTips, setEcoTips] = useState('');
+          const [isGeneratingTips, setIsGeneratingTips] = useState(false);
+
+
+          const mapRef = useRef(null);
+          const markersRef = useRef([]); // Stores all Leaflet markers (start, end, waypoints)
+          const routeLayersRef = useRef({}); // Stores Leaflet polyline layers for each mode
+
+
+          // Initialize map
+          useEffect(() => {
+            if (typeof window.L === 'undefined') {
+              console.warn('Leaflet library not found. Make sure it\'s loaded via CDN.');
+              return;
+            }
+
+
+            if (!mapRef.current) {
+              mapRef.current = window.L.map('map').setView([35.79, -78.78], 13); // Default view
+
+
+              window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.graphhopper.com/terms/">GraphHopper</a>'
+              }).addTo(mapRef.current);
+
+
+              setMapInitialized(true);
+
+
+              // Map click handler for setting start/end/waypoints
+              mapRef.current.on('click', (e) => {
+                if (!startCoords) {
+                  setStartCoords(e.latlng);
+                  setStartLocation(`Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`);
+                } else if (!endCoords) {
+                  setEndCoords(e.latlng);
+                  setEndLocation(`Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`);
+                } else {
+                  // If both start and end are set, add as a waypoint
+                  setWaypoints(prev => [...prev, { id: Date.now(), location: `Lat: ${e.latlng.lat.toFixed(4)}, Lng: ${e.latlng.lng.toFixed(4)}`, coords: e.latlng }]);
+                }
+              });
+            }
+          }, [startCoords, endCoords, waypoints]);
+
+
+          // Update markers and routes on map when coordinates or results change
+          useEffect(() => {
+            if (!mapRef.current || !mapInitialized) return;
+
+
+            // Clear all existing markers
+            markersRef.current.forEach(marker => mapRef.current.removeLayer(marker));
+            markersRef.current = [];
+
+
+            // Clear all existing route layers
+            Object.values(routeLayersRef.current).forEach(layer => mapRef.current.removeLayer(layer));
+            routeLayersRef.current = {};
+
+
+            // Add start marker
+            if (startCoords) {
+              const marker = window.L.marker(startCoords).addTo(mapRef.current)
+                .bindPopup('Start Location').openPopup();
+              markersRef.current.push(marker);
+            }
+
+
+            // Add end marker
+            if (endCoords) {
+              const marker = window.L.marker(endCoords).addTo(mapRef.current)
+                .bindPopup('End Location').openPopup();
+              markersRef.current.push(marker);
+            }
+
+
+            // Add waypoint markers
+            waypointCoords.forEach((coords, index) => {
+                const marker = window.L.marker(coords, { icon: window.L.divIcon({ className: 'bg-yellow-500 rounded-full w-6 h-6 flex items-center justify-center text-white font-bold', html: `${index + 1}` }) }).addTo(mapRef.current)
+                    .bindPopup(`Waypoint ${index + 1}`).openPopup();
+                markersRef.current.push(marker);
+            });
+
+
+            // Draw routes for each mode
+            results.forEach(route => {
+                if (route.polyline && route.time !== Infinity) { // Only draw if route exists and is practical
+                    const decodedPath = decodePolyline(route.polyline).map(coord => [coord.lat, coord.lng]);
+                    let color = 'gray';
+                    let weight = 4;
+                    let dashArray = null;
+
+
+                    switch (route.mode) {
+                        case 'driving': color = 'red'; weight = 5; break;
+                        case 'biking': color = 'blue'; weight = 4; dashArray = '5, 5'; break;
+                        case 'walking': color = 'green'; weight = 3; dashArray = '1, 5'; break;
+                        case 'transit': color = 'purple'; weight = 4; dashArray = '10, 10'; break; // Placeholder style
+                    }
+
+
+                    const polylineLayer = window.L.polyline(decodedPath, { color, weight, opacity: 0.7, dashArray }).addTo(mapRef.current);
+                    routeLayersRef.current[route.mode] = polylineLayer;
+                }
+            });
+
+
+            // Fit map bounds to all markers and routes
+            const allCoords = [
+                ...(startCoords ? [[startCoords.lat, startCoords.lng]] : []),
+                ...(endCoords ? [[endCoords.lat, endCoords.lng]] : []),
+                ...waypointCoords.map(wc => [wc.lat, wc.lng]),
+                ...Object.values(routeLayersRef.current).flatMap(layer => layer.getLatLngs()) // Include route points
+            ];
+
+
+            if (allCoords.length > 0) {
+                const bounds = window.L.latLngBounds(allCoords);
+                mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+            } else if (startCoords) {
+                mapRef.current.setView(startCoords, mapRef.current.getZoom());
+            }
+          }, [startCoords, endCoords, waypointCoords, results, mapInitialized]);
+
+
+          const handleGetGeolocation = () => {
+            if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  const { latitude, longitude } = position.coords;
+                  const newCoords = { lat: latitude, lng: longitude };
+                  setStartCoords(newCoords);
+                  setStartLocation(`Current Location (Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)})`);
+                  setError(null);
+                  if (mapRef.current) {
+                    mapRef.current.setView(newCoords, 15);
+                  }
+                },
+                (geoError) => {
+                  console.error('Geolocation error:', geoError);
+                  setError(`Error getting location: ${geoError.message}. Please enable location services.`);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+              );
+            } else {
+              setError('Geolocation is not supported by your browser.');
+            }
+          };
+
+
+          // Function to fetch route for a specific vehicle type
+          const fetchRouteForVehicle = async (points, vehicle) => {
+            if (!GRAPHHOPPER_API_KEY || GRAPHHOPPER_API_KEY === 'YOUR_GRAPHHOPPER_API_KEY') {
+              throw new Error('GraphHopper API Key is not set for geocoding.');
+            }
+
+
+            // Construct points parameter for multi-stop routes
+            const pointParams = points.map(p => `point=${p.lat},${p.lng}`).join('&');
+            const apiUrl = `https://graphhopper.com/api/1/route?${pointParams}&vehicle=${vehicle}&key=${GRAPHHOPPER_API_KEY}&points_encoded=true`;
+
+
+            try {
+              const response = await fetch(apiUrl);
+              if (!response.ok) {
+                const errorData = await response.json();
+                console.error(`GraphHopper API Error for ${vehicle}:`, errorData);
+                // For walking/biking, if no route found, return null instead of throwing to allow other modes to proceed
+                if (vehicle === 'foot' || vehicle === 'bike') {
+                    return null;
+                }
+                throw new Error(errorData.message || `Failed to fetch route for ${vehicle}.`);
+              }
+              const data = await response.json();
+
+
+              if (data.paths && data.paths.length > 0) {
+                const path = data.paths[0];
+                const distanceKm = path.distance / 1000;
+                const durationMinutes = Math.round(path.time / 60000);
+                const polyline = path.points;
+
+
+                return { distanceKm, durationMinutes, polyline };
+              } else {
+                return null; // No route found for this vehicle type
+              }
+            } catch (error) {
+              console.error(`Error in fetchRouteForVehicle (${vehicle}):`, error);
+              return null; // Return null on error for specific vehicle types
+            }
+          };
+
+
+          const calculateRoutes = (drivingRoute, bikingRoute, walkingRoute, totalDistanceKm, selectedVehicleType, evMode) => {
+            // Define thresholds for "impractical" modes for long distances
+            const WALKING_MAX_KM = 15;
+            const BIKING_MAX_KM = 70;
+
+
+            // More realistic average speeds (km/h) - used for fallback/estimation if no API route
+            const walkingSpeedKmH = 5;
+            const bikingSpeedKmH = 18;
+            const transitSpeedKmH = 25;
+
+
+            // More realistic average costs (per km)
+            const transitBaseCost = 2.75;
+            const transitCostPerKm = 0.15;
+
+
+            // CO2 emissions (kg CO2 per km)
+            const walkingCo2PerKm = 0;
+            const bikingCo2PerKm = 0;
+            const transitCo2PerKm = 0.05;
+
+
+            // Driving CO2 based on vehicle type and EV mode
+            let drivingCo2PerKm;
+            switch (selectedVehicleType) {
+                case 'gasoline':
+                    drivingCo2PerKm = evMode ? 0.05 : 0.17;
+                    break;
+                case 'hybrid':
+                    drivingCo2PerKm = evMode ? 0.03 : 0.12;
+                    break;
+                case 'electric':
+                    drivingCo2PerKm = 0.02;
+                    break;
+                default:
+                    drivingCo2PerKm = evMode ? 0.05 : 0.17;
+            }
+
+
+            // Eco Points: Higher points for more eco-friendly modes
+            const walkingPoints = 100;
+            const bikingPoints = 90;
+            const transitPoints = 70;
+            const drivingPoints = 10;
+
+
+            const results = [];
+
+
+            // Driving
+            if (drivingRoute) {
+                results.push({
+                    mode: 'driving',
+                    time: drivingRoute.durationMinutes,
+                    cost: drivingRoute.distanceKm * (evMode ? 0.10 : 0.25),
+                    co2: drivingRoute.distanceKm * drivingCo2PerKm,
+                    points: drivingPoints + (evMode ? 15 : 0),
+                    polyline: drivingRoute.polyline,
+                    vehicleType: selectedVehicleType,
+                    evMode: evMode
+                });
+            } else {
+                results.push({
+                    mode: 'driving',
+                    time: Infinity,
+                    cost: Infinity,
+                    co2: totalDistanceKm * drivingCo2PerKm,
+                    points: drivingPoints,
+                    vehicleType: selectedVehicleType,
+                    evMode: evMode
+                });
+            }
+
+
+            // Walking
+            if (walkingRoute && totalDistanceKm <= WALKING_MAX_KM) {
+                results.push({
+                    mode: 'walking',
+                    time: walkingRoute.durationMinutes,
+                    cost: 0,
+                    co2: walkingCo2PerKm,
+                    points: walkingPoints,
+                    polyline: walkingRoute.polyline
+                });
+            } else {
+                results.push({
+                    mode: 'walking',
+                    time: Infinity,
+                    cost: Infinity,
+                    co2: walkingCo2PerKm,
+                    points: 0,
+                });
+            }
+
+
+            // Biking
+            if (bikingRoute && totalDistanceKm <= BIKING_MAX_KM) {
+                results.push({
+                    mode: 'biking',
+                    time: bikingRoute.durationMinutes,
+                    cost: 0,
+                    co2: bikingCo2PerKm,
+                    points: bikingPoints,
+                    polyline: bikingRoute.polyline
+                });
+            } else {
+                results.push({
+                    mode: 'biking',
+                    time: Infinity,
+                    cost: Infinity,
+                    co2: bikingCo2PerKm,
+                    points: 0,
+                });
+            }
+
+
+            // Transit (calculated, no direct GraphHopper route for free tier)
+            let transitTime = Math.round((totalDistanceKm / transitSpeedKmH) * 60);
+            if (totalDistanceKm > 50) {
+                transitTime += 60;
+            } else if (totalDistanceKm > 10) {
+                transitTime += 30;
+            } else {
+                transitTime += 15;
+            }
+            results.push({
+              mode: 'transit',
+              time: transitTime,
+              cost: transitBaseCost + (totalDistanceKm * transitCostPerKm),
+              co2: totalDistanceKm * transitCo2PerKm,
+              points: transitPoints,
+              polyline: null
+            });
+
+
+            return results;
+          };
+
+
+          const handleStartLocationChange = (e) => {
+            setStartLocation(e.target.value);
+            setStartCoords(null); // Clear coords if user types, forcing geocoding on submit
+          };
+
+
+          const handleEndLocationChange = (e) => {
+            setEndLocation(e.target.value);
+            setEndCoords(null); // Clear coords if user types, forcing geocoding on submit
+          };
+
+
+          const handleWaypointLocationChange = (index, e) => {
+            const newWaypoints = [...waypoints];
+            newWaypoints[index].location = e.target.value;
+            newWaypoints[index].coords = null; // Clear coords for this waypoint
+            setWaypoints(newWaypoints);
+          };
+
+
+          const addWaypoint = () => {
+            setWaypoints(prev => [...prev, { id: Date.now(), location: '', coords: null }]);
+          };
+
+
+          const removeWaypoint = (idToRemove) => {
+            setWaypoints(prev => prev.filter(wp => wp.id !== idToRemove));
+            setWaypointCoords(prev => prev.filter(wc => wc.id !== idToRemove)); // Also remove from coords
+          };
+
+
+          const handleSubmit = async (e) => {
+            e.preventDefault();
+            setError(null);
+            setResults([]);
+            setDistance(null);
+            setDrivingDuration(null);
+            setEcoTips(''); // Clear previous tips
+            setIsCalculating(true);
+
+
+            let finalStartCoords = startCoords;
+            let finalEndCoords = endCoords;
+            let finalWaypointCoords = [];
+
+
+            try {
+                // Geocode start location
+                if (!finalStartCoords && startLocation) {
+                    const geoResult = await geocodeAddress(startLocation);
+                    if (geoResult) {
+                        finalStartCoords = geoResult;
+                        setStartCoords(geoResult);
+                    } else {
+                        throw new Error(`Could not find coordinates for start location: "${startLocation}".`);
+                    }
+                }
+
+
+                // Geocode end location
+                if (!finalEndCoords && endLocation) {
+                    const geoResult = await geocodeAddress(endLocation);
+                    if (geoResult) {
+                        finalEndCoords = geoResult;
+                        setEndCoords(geoResult);
+                    } else {
+                        throw new Error(`Could not find coordinates for end location: "${endLocation}".`);
+                    }
+                }
+
+
+                // Geocode waypoints
+                for (let i = 0; i < waypoints.length; i++) {
+                    let waypoint = waypoints[i];
+                    if (!waypoint.coords && waypoint.location) {
+                        const geoResult = await geocodeAddress(waypoint.location);
+                        if (geoResult) {
+                            finalWaypointCoords.push(geoResult);
+                            // Update the specific waypoint's coords in state
+                            setWaypoints(prev => {
+                                const newWps = [...prev];
+                                newWps[i].coords = geoResult;
+                                return newWps;
+                            });
+                        } else {
+                            throw new Error(`Could not find coordinates for waypoint ${i + 1}: "${waypoint.location}".`);
+                        }
+                    } else if (waypoint.coords) {
+                        finalWaypointCoords.push(waypoint.coords);
+                    }
+                }
+                setWaypointCoords(finalWaypointCoords); // Set the array of just coordinates
+
+
+                // Ensure all necessary coordinates are set
+                if (!finalStartCoords || !finalEndCoords) {
+                    throw new Error('Please provide valid start and end locations, or select them on the map.');
+                }
+
+
+                const allPoints = [finalStartCoords, ...finalWaypointCoords, finalEndCoords];
+
+
+                // Fetch routes for different modes
+                const [drivingRoute, bikingRoute, walkingRoute] = await Promise.all([
+                    fetchRouteForVehicle(allPoints, 'car'),
+                    fetchRouteForVehicle(allPoints, 'bike'),
+                    fetchRouteForVehicle(allPoints, 'foot')
+                ]);
+
+
+                // Use driving route's distance and duration as primary for comparison
+                const totalDistanceKm = drivingRoute ? drivingRoute.distanceKm : 0;
+                const totalDrivingDurationMinutes = drivingRoute ? drivingRoute.durationMinutes : 0;
+
+
+                setDistance(totalDistanceKm);
+                setDrivingDuration(totalDrivingDurationMinutes);
+                setResults(calculateRoutes(drivingRoute, bikingRoute, walkingRoute, totalDistanceKm, selectedVehicleType, evMode));
+
+
+            } catch (err) {
+              console.error('Error calculating route:', err);
+              setError(err.message || 'Could not calculate route. Please try different locations.');
+            } finally {
+              setIsCalculating(false);
+            }
+          };
+
+
+          // Function to generate eco tips using Gemini API
+          const generateEcoTips = async () => {
+            setIsGeneratingTips(true);
+            setEcoTips('');
+            setError(null);
+
+
+            if (!results || results.length === 0 || !distance) {
+                setError("Please calculate a route first to get eco tips.");
+                setIsGeneratingTips(false);
+                return;
+            }
+
+
+            const lowestCo2Result = results.find(r => r.mode === lowestCo2Option);
+            const drivingResult = results.find(r => r.mode === 'driving');
+
+
+            let prompt = `Generate a short, encouraging, and actionable eco-friendly travel tip for a journey.
+                          The total distance is ${distance.toFixed(1)} km.
+                          The most eco-friendly option found was ${lowestCo2Option} with ${lowestCo2Result.co2.toFixed(2)} kg of CO2 emissions.
+                          The driving option (current vehicle type: ${selectedVehicleType}, EV mode: ${evMode ? 'enabled' : 'disabled'}) has an estimated ${drivingResult.co2.toFixed(2)} kg of CO2 emissions.
+                          Suggest one or two practical tips. Keep it concise, under 80 words.`;
+
+
+            try {
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+                const apiKey = ""; // Canvas will provide this API key at runtime
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    setEcoTips(text);
+                } else {
+                    setError("Failed to generate eco tips. Please try again.");
+                    console.error("Gemini API response structure unexpected:", result);
+                }
+            } catch (err) {
+                console.error("Error calling Gemini API:", err);
+                setError("Error generating eco tips. Please check your network or API key.");
+            } finally {
+                setIsGeneratingTips(false);
+            }
+          };
+
+
+          // Determine the most eco-friendly option based on CO2
+          const lowestCo2Option = results.length > 0
+            ? results.reduce((prev, current) => {
+                if (prev.time === Infinity) return current;
+                if (current.time === Infinity) return prev;
+                return (prev.co2 < current.co2 ? prev : current);
+              }).mode
+            : null;
+
+
+          const getModeColor = (mode) => {
+            switch (mode) {
+              case 'walking': return 'card-eco-green';
+              case 'biking': return 'card-eco-blue';
+              case 'transit': return 'card-eco-purple';
+              case 'driving': return 'card-eco-red';
+              default: return 'bg-gray-50 border-gray-200';
+            }
+          };
+
+
+          const getModeIcon = (mode) => {
+            switch (mode) {
+              case 'walking': return '🚶';
+              case 'biking': return '🚴';
+              case 'transit': return '🚌';
+              case 'driving': return '🚗';
+              default: return '📍';
+            }
+          };
+
+
+          return (
+            React.createElement('div', { className: "min-h-screen bg-gray-100 font-sans antialiased text-gray-800 p-4 sm:p-6 lg:p-8 flex flex-col items-center" },
+              React.createElement('div', { className: "max-w-6xl w-full bg-white shadow-xl rounded-2xl p-6 sm:p-8 border border-gray-200 grid grid-cols-1 lg:grid-cols-3 gap-8" },
+                // Left Sidebar for Inputs and Controls
+                React.createElement('div', { className: "lg:col-span-1 bg-gray-50 p-6 rounded-xl shadow-inner border border-gray-200 flex flex-col space-y-6" },
+                  React.createElement('h2', { className: "text-2xl font-bold text-gray-900 mb-4" }, "Plan Your Eco Journey"),
+                  React.createElement('form', { onSubmit: handleSubmit, className: "space-y-6" },
+                    React.createElement('div', null,
+                      React.createElement(Label, { htmlFor: "start", className: "text-lg font-medium text-gray-700 mb-2 block" }, "Start Location"),
+                      React.createElement(Input, {
+                        id: "start",
+                        value: startLocation,
+                        onChange: handleStartLocationChange,
+                        placeholder: "Enter starting point or click on map",
+                      })
+                    ),
+                    React.createElement('div', null,
+                      React.createElement(Label, { htmlFor: "end", className: "text-lg font-medium text-gray-700 mb-2 block" }, "End Location"),
+                      React.createElement(Input, {
+                        id: "end",
+                        value: endLocation,
+                        onChange: handleEndLocationChange,
+                        placeholder: "Enter destination or click on map",
+                      })
+                    ),
+                    // Waypoints section
+                    React.createElement('div', { className: "space-y-4 border-t border-b border-gray-200 py-4" },
+                      React.createElement('h3', { className: "text-xl font-semibold text-gray-800" }, "Waypoints (Optional)"),
+                      waypoints.map((waypoint, index) => (
+                        React.createElement('div', { key: waypoint.id, className: "flex items-center gap-3" },
+                          React.createElement(Input, {
+                            value: waypoint.location,
+                            onChange: (e) => handleWaypointLocationChange(index, e),
+                            placeholder: `Waypoint ${index + 1} or click on map`,
+                            className: "flex-grow"
+                          }),
+                          React.createElement(Button, {
+                            type: "button",
+                            onClick: () => removeWaypoint(waypoint.id),
+                            variant: "destructive",
+                            size: "icon",
+                            className: "flex-shrink-0"
+                          }, "✖")
+                        )
+                      )),
+                      React.createElement(Button, {
+                        type: "button",
+                        onClick: addWaypoint,
+                        variant: "outline",
+                        className: "w-full py-2 px-4 border-dashed"
+                      }, "+ Add Waypoint")
+                    ),
+                    // EV Mode and Vehicle Type
+                    React.createElement('div', { className: "space-y-4" },
+                      React.createElement('div', { className: "flex items-center space-x-2" },
+                        React.createElement('input', {
+                          type: "checkbox",
+                          id: "evMode",
+                          checked: evMode,
+                          onChange: (e) => setEvMode(e.target.checked),
+                          className: "h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        }),
+                        React.createElement(Label, { htmlFor: "evMode", className: "text-base text-gray-700" }, "Enable EV Mode (Lower CO₂ for driving)")
+                      ),
+                      React.createElement('div', null,
+                        React.createElement(Label, { htmlFor: "vehicleType", className: "text-base text-gray-700 mb-2 block" }, "Driving Vehicle Type"),
+                        React.createElement('select', {
+                          id: "vehicleType",
+                          value: selectedVehicleType,
+                          onChange: (e) => setSelectedVehicleType(e.target.value),
+                          className: "w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200 shadow-sm bg-white"
+                        },
+                          React.createElement('option', { value: "gasoline" }, "Gasoline Car"),
+                          React.createElement('option', { value: "hybrid" }, "Hybrid Car"),
+                          React.createElement('option', { value: "electric" }, "Electric Car")
+                        )
+                      )
+                    ),
+                    React.createElement('div', { className: "flex flex-col sm:flex-row gap-4 mt-6" },
+                      React.createElement(Button, {
+                        type: "submit",
+                        disabled: isCalculating || (!startCoords && !startLocation) || (!endCoords && !endLocation),
+                        className: `flex-grow py-3 px-6 text-lg font-semibold bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-lg`
+                      },
+                        isCalculating ? (
+                          React.createElement('span', { className: "flex items-center justify-center" },
+                            React.createElement('svg', { className: "animate-spin -ml-1 mr-3 h-5 w-5 text-white", xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24" },
+                              React.createElement('circle', { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }),
+                              React.createElement('path', { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })
+                            ),
+                            "Calculating Routes..."
+                          )
+                        ) : (
+                          'Compare Routes'
+                        )
+                      ),
+                    ),
+                    React.createElement(Button, {
+                        type: "button",
+                        onClick: handleGetGeolocation,
+                        disabled: isCalculating,
+                        className: `w-full py-3 px-6 text-lg font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 shadow-lg mt-4`
+                    },
+                        "Use My Current Location 📍"
+                    )
+                  )
+                ),
+
+
+                // Right Main Content Area (Map and Results)
+                React.createElement('div', { className: "lg:col-span-2 flex flex-col space-y-6" },
+                  error && (
+                    React.createElement('div', { className: "p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center font-medium shadow-sm" },
+                      error
+                    )
+                  ),
+                  React.createElement('div', { id: "map", className: "flex-grow" }),
+                  React.createElement('p', { className: "text-center text-sm text-gray-600" },
+                    "Click on the map to set Start and End locations, or type them in the fields above. Click again to add waypoints."
+                  ),
+
+
+                  distance !== null && drivingDuration !== null && (
+                    React.createElement('div', { className: "p-4 bg-blue-50 border border-blue-200 rounded-lg text-center shadow-sm" },
+                      React.createElement('p', { className: "text-xl font-bold text-blue-800" },
+                        "Total Driving Distance: ",
+                        React.createElement('span', { className: "text-blue-600" }, `${distance.toFixed(1)} km`)
+                      ),
+                      React.createElement('p', { className: "text-md text-blue-700 mt-1" },
+                        "Estimated Driving Duration: ",
+                        React.createElement('span', { className: "text-blue-600" }, `${drivingDuration} minutes`)
+                      )
+                    )
+                  ),
+
+
+                  results.length > 0 && (
+                    React.createElement('div', { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
+                      results.map((result) => (
+                        React.createElement(Card, {
+                          key: result.mode + (result.vehicleType || ''), // Unique key for driving modes
+                          className: `transition-all duration-300 ease-in-out ${getModeColor(result.mode)} ${lowestCo2Option === result.mode ? 'ring-highlight' : 'border-2'} ${result.time === Infinity ? 'opacity-50 grayscale' : ''}` // Dim impractical options
+                        },
+                          React.createElement(CardHeader, { className: "flex flex-row items-center justify-between p-4 pb-2" },
+                            React.createElement(CardTitle, { className: "capitalize text-xl font-bold text-gray-800" },
+                              result.mode === 'driving' ? `${result.vehicleType || 'Driving'} ${result.mode}` : result.mode
+                            ),
+                            React.createElement('span', { className: "text-3xl" }, getModeIcon(result.mode))
+                          ),
+                          React.createElement(CardContent, { className: "p-4 pt-0" },
+                            React.createElement('div', { className: "space-y-2 text-gray-700" },
+                              React.createElement('p', null, React.createElement('span', { className: "font-semibold" }, "Time:"), ` ${result.time === Infinity ? 'N/A' : result.time + ' min'}`),
+                              React.createElement('p', null, React.createElement('span', { className: "font-semibold" }, "Cost:"), ` ${result.cost === Infinity ? 'N/A' : '$' + result.cost.toFixed(2)}`),
+                              React.createElement('p', null, React.createElement('span', { className: "font-semibold" }, "CO₂:"), ` ${result.co2.toFixed(2)} kg`),
+                              React.createElement('p', null, React.createElement('span', { className: "font-semibold" }, "Eco Points:"), ` ${result.points}`)
+                            )
+                          )
+                        )
+                      ))
+                    )
+                  ),
+
+
+                  lowestCo2Option && (
+                    React.createElement('div', { className: "p-5 bg-green-100 border border-green-400 text-green-800 rounded-xl text-center shadow-lg" },
+                      React.createElement('p', { className: "font-extrabold text-2xl text-green-700 mb-2" },
+                        "The most eco-friendly option is ",
+                        React.createElement('span', { className: "capitalize" }, lowestCo2Option),
+                        "! 🌱"
+                      ),
+                      React.createElement('p', { className: "text-lg text-green-600" },
+                        "Choosing this option results in the lowest CO₂ emissions for your journey.",
+                        React.createElement('br', null),
+                        "Consider walking or biking for shorter distances to maximize your eco-impact!"
+                      ),
+                      React.createElement(Button, {
+                          onClick: generateEcoTips,
+                          disabled: isGeneratingTips,
+                          variant: "eco",
+                          className: "mt-4 py-3 px-6 text-lg font-semibold"
+                      },
+                          isGeneratingTips ? (
+                              React.createElement('span', { className: "flex items-center justify-center" },
+                                  React.createElement('svg', { className: "animate-spin -ml-1 mr-3 h-5 w-5 text-white", xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24" },
+                                      React.createElement('circle', { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }),
+                                      React.createElement('path', { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })
+                                  ),
+                                  "Generating Tips..."
+                              )
+                          ) : (
+                              "✨ Get Eco Tips"
+                          )
+                      ),
+                      ecoTips && (
+                          React.createElement('div', { className: "mt-4 p-4 bg-green-50 border border-green-300 rounded-lg text-green-700 text-left" },
+                              React.createElement('p', { className: "font-medium" }, "Your Eco Tip:"),
+                              React.createElement('p', { className: "mt-2" }, ecoTips)
+                          )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          );
+        }
+
+
+        // Render your React App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            React.createElement(App, null)
+        );
+    </script>
+</body>
+</html>
+
+
+
+
+
