@@ -43,6 +43,7 @@
         .card-eco-purple { background-color: #1a1a1a; border-color: #4CAF50; }
         .card-eco-red { background-color: #1a1a1a; border-color: #4CAF50; }
 
+
         .ring-highlight {
             box-shadow: 0 0 0 4px #4CAF50, 0 0 0 6px #0d0d0d; /* Green highlight on dark background */
         }
@@ -89,7 +90,33 @@
         .newsletter-section button:hover {
             background-color: #43A047;
         }
+        /* Autocomplete dropdown styles */
+        .autocomplete-dropdown {
+            position: absolute;
+            z-index: 1000;
+            background-color: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+            width: calc(100% - 2rem); /* Match input width */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+            margin-top: 0.25rem;
+        }
+        .autocomplete-item {
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            color: #e0e0e0;
+            border-bottom: 1px solid #333;
+        }
+        .autocomplete-item:hover {
+            background-color: #3a3a3a;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
     </style>
+
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -102,12 +129,15 @@
 <body class="bg-gray-100">
     <div id="root"></div>
 
+
     <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 
     <!-- Your React App Script -->
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
+
 
         // Custom UI Components (using shadcn/ui like patterns)
         const Card = ({ className, children }) => (
@@ -116,11 +146,13 @@
           </div>
         );
 
+
         const CardHeader = ({ className, children }) => (
           <div className={`flex flex-col space-y-1.5 p-6 ${className}`}>
             {children}
           </div>
         );
+
 
         const CardTitle = ({ className, children }) => (
           <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`}>
@@ -128,11 +160,13 @@
           </h3>
         );
 
+
         const CardContent = ({ className, children }) => (
           <div className={`p-6 pt-0 ${className}`}>
             {children}
           </div>
         );
+
 
         const Button = ({ className, variant = 'default', size = 'default', disabled, children, ...props }) => {
           const baseClasses = "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
@@ -160,6 +194,7 @@
           );
         };
 
+
         const Input = ({ className, type = 'text', ...props }) => (
           <input
             type={type}
@@ -168,22 +203,28 @@
           />
         );
 
+
         const Label = ({ className, children, ...props }) => (
           <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#e0e0e0] ${className}`} {...props}>
             {children}
           </label>
         );
 
+
         // --- API Keys ---
         // IMPORTANT: Using Geoapify API key for geocoding and routing
         const GEOAPIFY_API_KEY = '4c8596ef790b461d94dd7fbbfc1dcfda'; // Geoapify API Key
+
 
         // Open-Meteo doesn't use a traditional API key for its public forecast API,
         // but the variable name is kept for consistency.
         const OPENWEATHERMAP_API_KEY = '';
 
+
         // Fuel Price API Key
         const FUEL_PRICE_API_KEY = '2mGpGW2C1f5qz8hwbqxEHp:4kYBZamfRjJQYAYoS0zf6Q';
+
+
 
 
         // Helper function to convert Geoapify polyline format (array of [longitude, latitude])
@@ -193,6 +234,7 @@
             return geoapifyPoints.map(p => [p[1], p[0]]);
         }
 
+
         // Helper function to geocode an address string to LatLng using Geoapify Geocoding API
         const geocodeAddress = async (address) => {
             if (!GEOAPIFY_API_KEY) {
@@ -201,6 +243,7 @@
             const encodedAddress = encodeURIComponent(address);
             // Geoapify Geocoding API URL
             const geocodingUrl = `https://api.geoapify.com/v1/geocode/search?text=${encodedAddress}&apiKey=${GEOAPIFY_API_KEY}`;
+
 
             try {
                 const response = await fetch(geocodingUrl);
@@ -212,7 +255,7 @@
                 const data = await response.json();
                 if (data.features && data.features.length > 0) {
                     // Geoapify returns [longitude, latitude]
-                    return { lat: data.features[0].geometry.coordinates[1], lng: data.features[0].geometry.coordinates[0] };
+                    return { lat: data.features[0].geometry.coordinates[1], lng: data.features[0].geometry.coordinates[0], address: data.features[0].properties.formatted };
                 } else {
                     return null;
                 }
@@ -222,12 +265,39 @@
             }
         };
 
+        // Helper function for reverse geocoding
+        const reverseGeocode = async (lat, lng) => {
+            if (!GEOAPIFY_API_KEY) {
+                throw new Error('Geoapify API Key is not set or is invalid for reverse geocoding.');
+            }
+            const reverseGeocodingUrl = `https://api.geoapify.com/v1/geocode/reverse?lat=${lat}&lon=${lng}&apiKey=${GEOAPIFY_API_KEY}`;
+            try {
+                const response = await fetch(reverseGeocodingUrl);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Geoapify Reverse Geocoding API Error:', errorData);
+                    return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`; // Fallback to coords
+                }
+                const data = await response.json();
+                if (data.features && data.features.length > 0) {
+                    return data.features[0].properties.formatted;
+                } else {
+                    return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`; // Fallback to coords
+                }
+            } catch (error) {
+                console.error('Error in reverseGeocode:', error);
+                return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`; // Fallback to coords
+            }
+        };
+
+
         // Fetch current gas prices using the provided API
         const fetchFuelPrices = async (lat, lng) => {
             if (!FUEL_PRICE_API_KEY) {
                 console.warn('Fuel Price API Key is not set. Using default fuel price.');
                 return { gasoline: 3.45, diesel: 3.89, electricity: 0.13 };
             }
+
 
             // Using CollectAPI endpoint based on the API key format
             const apiUrl = `https://api.collectapi.com/gasPrice/gasoline/fromCoordinates?lat=${lat}&lng=${lng}`;
@@ -264,6 +334,7 @@
             }
         };
 
+
         // Fetch weather data using Open-Meteo API
         const fetchWeatherData = async (lat, lng) => {
             // Open-Meteo public API does not require an API key
@@ -291,6 +362,7 @@
                     else if (data.current_weather.temperature > 0) description = 'cool';
                     else description = 'cold';
 
+
                     return {
                         main: { temp: data.current_weather.temperature },
                         weather: [{ main: 'Current', description: description }],
@@ -314,6 +386,7 @@
             }
         };
 
+
         // Route Comparison Chart Component
         // Displays a visual comparison of different route modes based on time, cost, and CO2 emissions.
         const RouteComparisonChart = ({ results }) => {
@@ -321,6 +394,7 @@
             const maxTime = Math.max(...results.filter(r => r.time !== Infinity).map(r => r.time), 1); // Ensure not zero
             const maxCost = Math.max(...results.filter(r => r.cost !== Infinity).map(r => r.cost), 1);
             const maxCo2 = Math.max(...results.map(r => r.co2), 0.1); // Ensure not zero
+
 
             return (
               <div className='bg-[#1a1a1a] p-6 rounded-xl shadow-md border border-[#222]'>
@@ -371,6 +445,7 @@
             );
         };
 
+
         // Carbon Savings Calculator Component
         // Calculates and displays potential CO2 savings by choosing an eco-friendly option over driving.
         const CarbonSavingsCalculator = ({ results }) => {
@@ -380,14 +455,17 @@
             
             if (!drivingResult || ecoOptions.length === 0) return null;
 
+
             // Find the eco-friendly option with the lowest CO2 emissions
             const bestEcoOption = ecoOptions.reduce((prev, current) => 
                 prev.co2 < current.co2 ? prev : current
             );
 
+
             const savings = drivingResult.co2 - bestEcoOption.co2;
             // 1 tree absorbs approximately 21 kg of CO2 per year.
             const treesEquivalent = Math.round(savings / 0.021); 
+
 
             return (
               <div className='bg-[#1a1a1a] p-6 rounded-xl border border-[#4CAF50] shadow-md'>
@@ -431,6 +509,7 @@
               </div>
             );
         };
+
 
         // Route Details Panel Component
         // Displays detailed information about a selected route, including real directions
@@ -492,11 +571,13 @@
             );
         };
 
+
         // Favorite Routes Component
         // Allows users to save and load frequently used routes using browser's localStorage.
         const FavoriteRoutes = ({ onLoadRoute, onSaveRoute }) => {
             const [favorites, setFavorites] = useState([]);
             const [saveMessage, setSaveMessage] = useState('');
+
 
             useEffect(() => {
                 const saved = localStorage.getItem('ecoRouteFavorites'); // Use a unique key
@@ -504,6 +585,7 @@
                     setFavorites(JSON.parse(saved));
                 }
             }, []);
+
 
             // Function to save a new favorite route
             const handleSaveFavorite = (startLocation, endLocation, waypoints) => {
@@ -522,6 +604,7 @@
                 setTimeout(() => setSaveMessage(''), 3000); // Clear message after 3 seconds
             };
 
+
             // Function to delete a favorite route
             const deleteFavorite = (id) => {
                 const updated = favorites.filter(f => f.id !== id);
@@ -529,10 +612,12 @@
                 localStorage.setItem('ecoRouteFavorites', JSON.stringify(updated));
             };
 
+
             // Expose save function to parent component
             useEffect(() => {
                 onSaveRoute.current = handleSaveFavorite;
             }, [onSaveRoute, handleSaveFavorite]);
+
 
             return (
               <div className='space-y-4'>
@@ -573,11 +658,13 @@
             );
         };
 
+
         // Time Optimization Component
         // Provides suggestions for optimal departure times based on traffic estimates.
         const TimeOptimization = ({ onTimeChange }) => {
             const [selectedTime, setSelectedTime] = useState('');
             const [suggestions, setSuggestions] = useState([]);
+
 
             const generateSuggestions = useCallback((time) => {
                 // In a real scenario, this would involve calling a routing API with time-dependent traffic data.
@@ -592,12 +679,14 @@
                 setSuggestions(mockSuggestions);
             }, []);
 
+
             useEffect(() => {
                 if (selectedTime) {
                     generateSuggestions(selectedTime);
                     onTimeChange(selectedTime);
                 }
             }, [selectedTime, onTimeChange, generateSuggestions]);
+
 
             return (
               <div className='space-y-4 bg-[#1a1a1a] p-6 rounded-xl border border-[#4CAF50] shadow-md'>
@@ -608,7 +697,7 @@
                       id='departureTime'
                       value={selectedTime}
                       onChange={(e) => setSelectedTime(e.target.value)}
-                      className='w-full p-2 border border-[#333] rounded-lg'
+                      className='w-full p-2 border-[#333] rounded-lg'
                   />
                   {suggestions.length > 0 && (
                       <div className='bg-[#222] p-4 rounded-lg mt-4'>
@@ -627,6 +716,7 @@
             );
         };
 
+
         // Multi-Modal Suggestions Component
         // This component now simply displays the individual route options clearly,
         // as complex multi-modal planning (e.g., "drive to station, then bus") requires specialized APIs.
@@ -634,7 +724,9 @@
             // Filter out driving mode as it's typically the "alternative" to eco-friendly multi-modal
             const ecoModes = results.filter(r => r.mode !== 'driving' && r.time !== Infinity);
 
+
             if (ecoModes.length === 0) return null;
+
 
             return (
               <div className='bg-[#1a1a1a] p-6 rounded-xl border border-[#4CAF50] shadow-md'>
@@ -656,6 +748,7 @@
               </div>
             );
         };
+
 
         // Main EcoRoutePlanner component
         function App() {
@@ -679,9 +772,55 @@
           const [departureTime, setDepartureTime] = useState('');
           const saveFavoriteRouteRef = useRef(null); // Ref to hold the save favorite function
 
+          // Autocomplete states
+          const [startSuggestions, setStartSuggestions] = useState([]);
+          const [endSuggestions, setEndSuggestions] = useState([]);
+          const waypointSuggestionsRef = useRef([]); // Array of suggestion arrays
+          const [activeInput, setActiveInput] = useState(null); // To track which input has focus for suggestions
+
+
           const mapRef = useRef(null);
           const markersRef = useRef([]);
           const routeLayersRef = useRef({});
+
+
+          // Debounce function for autocomplete
+          const debounce = (func, delay) => {
+            let timeout;
+            return function(...args) {
+              const context = this;
+              clearTimeout(timeout);
+              timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+          };
+
+
+          // Autocomplete handler
+          const handleAutocomplete = useCallback(debounce(async (query, setSuggestions) => {
+            if (query.length < 3) { // Only search if query is at least 3 characters
+              setSuggestions([]);
+              return;
+            }
+            if (!GEOAPIFY_API_KEY) {
+                console.error('Geoapify API Key is not set for autocomplete.');
+                return;
+            }
+            const encodedQuery = encodeURIComponent(query);
+            const autocompleteUrl = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodedQuery}&limit=5&apiKey=${GEOAPIFY_API_KEY}`;
+            try {
+              const response = await fetch(autocompleteUrl);
+              const data = await response.json();
+              if (data.features) {
+                setSuggestions(data.features.map(f => ({
+                  address: f.properties.formatted,
+                  coords: { lat: f.properties.lat, lng: f.properties.lon }
+                })));
+              }
+            } catch (err) {
+              console.error('Autocomplete error:', err);
+            }
+          }, 300), [GEOAPIFY_API_KEY]);
+
 
           // Load fuel prices on component mount
           useEffect(() => {
@@ -694,6 +833,7 @@
             }
           }, [startCoords]);
 
+
           // Initialize map
           useEffect(() => {
             // Ensure Leaflet library is loaded before initializing the map
@@ -702,36 +842,45 @@
               return;
             }
 
+
             // Initialize the map only once
             if (!mapRef.current) {
               mapRef.current = window.L.map('map').setView([35.79, -78.78], 13); // Default view (e.g., Cary, NC)
+
 
               // Add OpenStreetMap tiles
               window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.geoapify.com/terms-and-conditions">Geoapify</a>' // Updated attribution
               }).addTo(mapRef.current);
 
+
               setMapInitialized(true);
 
+
               // Map click handler for setting start/end/waypoints
-              mapRef.current.on('click', (e) => {
+              mapRef.current.on('click', async (e) => {
                 const latlng = e.latlng;
+                const readableAddress = await reverseGeocode(latlng.lat, latlng.lng);
+
+
                 if (!startCoords) {
                   setStartCoords(latlng);
-                  setStartLocation(`Lat: ${latlng.lat.toFixed(4)}, Lng: ${latlng.lng.toFixed(4)}`);
+                  setStartLocation(readableAddress);
                 } else if (!endCoords) {
                   setEndCoords(latlng);
-                  setEndLocation(`Lat: ${latlng.lat.toFixed(4)}, Lng: ${latlng.lng.toFixed(4)}`);
+                  setEndLocation(readableAddress);
                 } else {
-                  setWaypoints(prev => [...prev, { id: Date.now(), location: `Lat: ${latlng.lat.toFixed(4)}, Lng: ${latlng.lng.toFixed(4)}`, coords: latlng }]);
+                  setWaypoints(prev => [...prev, { id: Date.now(), location: readableAddress, coords: latlng }]);
                 }
               });
             }
           }, [startCoords, endCoords, waypoints]); // Dependencies to re-run effect if these states change
 
+
           // Update markers and routes on map when coordinates or results change
           useEffect(() => {
             if (!mapRef.current || !mapInitialized) return;
+
 
             // Clear all existing markers
             markersRef.current.forEach(marker => mapRef.current.removeLayer(marker));
@@ -740,6 +889,7 @@
             Object.values(routeLayersRef.current).forEach(layer => mapRef.current.removeLayer(layer));
             routeLayersRef.current = {};
 
+
             // Add start marker
             if (startCoords) {
               const marker = window.L.marker(startCoords).addTo(mapRef.current)
@@ -747,12 +897,14 @@
               markersRef.current.push(marker);
             }
 
+
             // Add end marker
             if (endCoords) {
               const marker = window.L.marker(endCoords).addTo(mapRef.current)
                 .bindPopup('End Location').openPopup();
               markersRef.current.push(marker);
             }
+
 
             // Add waypoint markers
             waypointCoords.forEach((coords, index) => {
@@ -766,6 +918,7 @@
                 markersRef.current.push(marker);
             });
 
+
             // Draw routes for each mode
             results.forEach(route => {
                 if (route.polyline && route.time !== Infinity) {
@@ -773,6 +926,7 @@
                     let color = 'gray';
                     let weight = 4;
                     let dashArray = null;
+
 
                     // Assign colors and styles based on transportation mode
                     switch (route.mode) {
@@ -782,10 +936,12 @@
                         case 'transit': color = '#4CAF50'; weight = 4; dashArray = '10, 10'; break; // Green for transit
                     }
 
+
                     const polylineLayer = window.L.polyline(decodedPath, { color, weight, opacity: 0.7, dashArray }).addTo(mapRef.current);
                     routeLayersRef.current[route.mode] = polylineLayer;
                 }
             });
+
 
             // Fit map bounds to all markers and routes
             const allCoords = [
@@ -794,6 +950,7 @@
                 ...waypointCoords.map(wc => [wc.lat, wc.lng]),
                 ...Object.values(routeLayersRef.current).flatMap(layer => layer.getLatLngs())
             ];
+
 
             if (allCoords.length > 0) {
                 const bounds = window.L.latLngBounds(allCoords);
@@ -804,15 +961,17 @@
             }
           }, [startCoords, endCoords, waypointCoords, results, mapInitialized]);
 
+
           // Handles getting user's current geolocation
           const handleGetGeolocation = () => {
             if (navigator.geolocation) {
               navigator.geolocation.getCurrentPosition(
-                (position) => {
+                async (position) => { // Made async to await reverseGeocode
                   const { latitude, longitude } = position.coords;
                   const newCoords = { lat: latitude, lng: longitude };
                   setStartCoords(newCoords);
-                  setStartLocation(`Lat: ${String(latitude.toFixed(4))}, Lng: ${String(longitude.toFixed(4))}`);
+                  const readableAddress = await reverseGeocode(latitude, longitude);
+                  setStartLocation(readableAddress);
                   setError(null);
                   if (mapRef.current) {
                     mapRef.current.setView(newCoords, 15); // Zoom in on current location
@@ -834,12 +993,14 @@
             }
           };
 
+
           // Function to fetch route for a specific vehicle type using Geoapify Routing API
-          const fetchRouteForVehicle = async (points, vehicle) => {
+          const fetchRouteForVehicle = async (points, vehicle, avoidTolls, avoidHighways, departureTime) => {
             if (!GEOAPIFY_API_KEY) {
               console.error('Geoapify API Key is not set or is invalid. Cannot fetch routes.');
               return null;
             }
+
 
             const waypointString = points.map(p => `${String(p.lat)},${String(p.lng)}`).join('|');
             let mode = '';
@@ -850,9 +1011,18 @@
                 default: mode = 'drive'; // Default to drive if unknown
             }
 
+            let avoidFeatures = [];
+            if (avoidTolls) avoidFeatures.push('toll');
+            if (avoidHighways) avoidFeatures.push('motorway');
+            const avoidParam = avoidFeatures.length > 0 ? `&avoid_features=${avoidFeatures.join(',')}` : '';
+
+            const departureTimeParam = departureTime ? `&departure_time=${departureTime}` : '';
+
+
             // Geoapify Routing API URL
             // instructions=true to get step-by-step instructions
-            const apiUrl = `https://api.geoapify.com/v1/routing?waypoints=${waypointString}&mode=${mode}&details=instructions&apiKey=${GEOAPIFY_API_KEY}`;
+            const apiUrl = `https://api.geoapify.com/v1/routing?waypoints=${waypointString}&mode=${mode}&details=instructions${avoidParam}${departureTimeParam}&apiKey=${GEOAPIFY_API_KEY}`;
+
 
             try {
               const response = await fetch(apiUrl);
@@ -867,6 +1037,7 @@
               }
               const data = await response.json();
 
+
               if (data.features && data.features.length > 0) {
                 const routeProperties = data.features[0].properties;
                 const distanceMeters = routeProperties.distance;
@@ -879,6 +1050,7 @@
                                             ? step.instruction.text 
                                             : String(step.instruction))
                 );
+
 
                 return {
                     distanceKm: distanceMeters / 1000,
@@ -895,20 +1067,25 @@
             }
           };
 
+
           // Calculates various metrics (time, cost, CO2, eco points) for different transportation modes.
           const calculateRoutes = (drivingRoute, bikingRoute, walkingRoute, totalDistanceKm, selectedVehicleType, evMode, fuelPrices) => {
             const WALKING_MAX_KM = 15; // Max realistic walking distance for comparison
             const BIKING_MAX_KM = 70; // Max realistic biking distance for comparison
 
+
             // Base speeds and costs (can be refined)
             const transitSpeedKmH = 25; // Average transit speed including stops
+
 
             const transitBaseCost = 2.75; // Flat fare
             const transitCostPerKm = 0.15;
 
+
             const walkingCo2PerKm = 0; // Negligible direct CO2
             const bikingCo2PerKm = 0; // Negligible direct CO2
             const transitCo2PerKm = 0.05; // Average CO2 for public transit (e.g., bus/train)
+
 
             // Calculate real fuel costs using fetched prices or defaults
             let fuelCostPerKm = 0.25; // Default cost per km for driving
@@ -928,6 +1105,7 @@
                 }
             }
 
+
             // CO2 emissions per km for driving, adjusted for EV mode and vehicle type
             switch (selectedVehicleType) {
                 case 'gasoline':
@@ -943,13 +1121,16 @@
                     drivingCo2PerKm = evMode ? 0.05 : 0.17;
             }
 
+
             // Eco points for each mode (higher is better)
             const walkingPoints = 100;
             const bikingPoints = 90;
             const transitPoints = 70;
             const drivingPoints = 10;
 
+
             const results = [];
+
 
             // Driving calculation
             if (drivingRoute) {
@@ -978,6 +1159,7 @@
                 });
             }
 
+
             // Walking calculation
             if (walkingRoute && totalDistanceKm <= WALKING_MAX_KM) {
                 results.push({
@@ -999,6 +1181,7 @@
                     instructions: []
                 });
             }
+
 
             // Biking calculation
             if (bikingRoute && totalDistanceKm <= BIKING_MAX_KM) {
@@ -1022,6 +1205,7 @@
                 });
             }
 
+
             // Transit calculation (mocked as Geoapify free tier doesn't support transit for general public)
             let transitTime = Math.round((totalDistanceKm / transitSpeedKmH) * 60);
             // Add some buffer time for transfers/waiting for longer distances
@@ -1042,36 +1226,78 @@
               instructions: []
             });
 
+
             return results;
           };
 
+
           // Handlers for input changes
           const handleStartLocationChange = (e) => {
-            setStartLocation(e.target.value);
-            setStartCoords(null); // Clear coords to trigger geocoding on submit
+            const value = e.target.value;
+            setStartLocation(value);
+            setStartCoords(null); // Clear coords to trigger geocoding on submit or autocomplete select
+            handleAutocomplete(value, setStartSuggestions);
+            setActiveInput('start');
           };
+
 
           const handleEndLocationChange = (e) => {
-            setEndLocation(e.target.value);
-            setEndCoords(null); // Clear coords to trigger geocoding on submit
+            const value = e.target.value;
+            setEndLocation(value);
+            setEndCoords(null); // Clear coords to trigger geocoding on submit or autocomplete select
+            handleAutocomplete(value, setEndSuggestions);
+            setActiveInput('end');
           };
 
+
           const handleWaypointLocationChange = (index, e) => {
+            const value = e.target.value;
             const newWaypoints = [...waypoints];
-            newWaypoints[index].location = e.target.value;
+            newWaypoints[index].location = value;
             newWaypoints[index].coords = null; // Clear coords
             setWaypoints(newWaypoints);
+            // Autocomplete for waypoints (need to manage a ref for suggestions)
+            if (!waypointSuggestionsRef.current[index]) {
+                waypointSuggestionsRef.current[index] = useState([]);
+            }
+            handleAutocomplete(value, waypointSuggestionsRef.current[index][1]);
+            setActiveInput(`waypoint-${index}`);
           };
+
 
           const addWaypoint = () => {
             setWaypoints(prev => [...prev, { id: Date.now(), location: '', coords: null }]);
           };
 
+
           const removeWaypoint = (idToRemove) => {
             setWaypoints(prev => prev.filter(wp => wp.id !== idToRemove));
-            // Also remove from waypointCoords if it was already geocoded
-            setWaypointCoords(prev => prev.filter(wc => wc.id !== idToRemove));
+            setWaypointCoords(prev => prev.filter(wc => wc.id !== idToRemove)); // Also remove from geocoded coords
           };
+
+
+          const handleSelectSuggestion = (type, suggestion) => {
+            if (type === 'start') {
+              setStartLocation(suggestion.address);
+              setStartCoords(suggestion.coords);
+              setStartSuggestions([]);
+            } else if (type === 'end') {
+              setEndLocation(suggestion.address);
+              setEndCoords(suggestion.coords);
+              setEndSuggestions([]);
+            } else if (type.startsWith('waypoint-')) {
+              const index = parseInt(type.split('-')[1]);
+              setWaypoints(prev => {
+                const newWps = [...prev];
+                newWps[index].location = suggestion.address;
+                newWps[index].coords = suggestion.coords;
+                return newWps;
+              });
+              waypointSuggestionsRef.current[index][1]([]); // Clear specific waypoint suggestions
+            }
+            setActiveInput(null); // Clear active input
+          };
+
 
           // Main function to handle route calculation submission
           const handleSubmit = async (e) => {
@@ -1082,27 +1308,28 @@
             setDrivingDuration(null);
             setIsCalculating(true);
 
+
             let currentStartCoords = startCoords;
             let currentEndCoords = endCoords;
             let currentWaypointCoords = [];
 
+
             try {
-                // Geocode start location if not already set by map click
+                // Geocode start location if not already set by map click or autocomplete
                 if (!currentStartCoords && startLocation) {
                     const geoResult = await geocodeAddress(startLocation);
                     if (geoResult) {
                         currentStartCoords = geoResult;
                         setStartCoords(geoResult);
-                        // Fetch weather for start location
                         fetchWeatherData(geoResult.lat, geoResult.lng).then(setWeather);
-                        // Fetch fuel prices for start location
                         fetchFuelPrices(geoResult.lat, geoResult.lng).then(setFuelPrices);
                     } else {
                         throw new Error(`Could not find coordinates for start location: "${String(startLocation)}".`);
                     }
                 }
 
-                // Geocode end location if not already set by map click
+
+                // Geocode end location if not already set by map click or autocomplete
                 if (!currentEndCoords && endLocation) {
                     const geoResult = await geocodeAddress(endLocation);
                     if (geoResult) {
@@ -1113,6 +1340,7 @@
                     }
                 }
 
+
                 // Geocode waypoints
                 for (let i = 0; i < waypoints.length; i++) {
                     let waypoint = waypoints[i];
@@ -1120,7 +1348,6 @@
                         const geoResult = await geocodeAddress(waypoint.location);
                         if (geoResult) {
                             currentWaypointCoords.push(geoResult);
-                            // Update the waypoint in state with its coordinates
                             setWaypoints(prev => {
                                 const newWps = [...prev];
                                 newWps[i].coords = geoResult;
@@ -1133,27 +1360,33 @@
                         currentWaypointCoords.push(waypoint.coords);
                     }
                 }
-                setWaypointCoords(currentWaypointCoords); // Update the state with geocoded waypoints
+                setWaypointCoords(currentWaypointCoords);
+
 
                 if (!currentStartCoords || !currentEndCoords) {
                     throw new Error('Please provide valid start and end locations, or select them on the map.');
                 }
 
+
                 const allPoints = [currentStartCoords, ...currentWaypointCoords, currentEndCoords];
 
-                // Fetch routes for different modes concurrently
+
+                // Fetch routes for different modes concurrently, passing avoidances and departure time
                 const [drivingRoute, bikingRoute, walkingRoute] = await Promise.all([
-                    fetchRouteForVehicle(allPoints, 'car'),
-                    fetchRouteForVehicle(allPoints, 'bike'),
-                    fetchRouteForVehicle(allPoints, 'foot')
+                    fetchRouteForVehicle(allPoints, 'car', avoidTolls, avoidHighways, departureTime),
+                    fetchRouteForVehicle(allPoints, 'bike', avoidTolls, avoidHighways, departureTime),
+                    fetchRouteForVehicle(allPoints, 'foot', avoidTolls, avoidHighways, departureTime)
                 ]);
+
 
                 const totalDistanceKm = drivingRoute ? drivingRoute.distanceKm : 0;
                 const totalDrivingDurationMinutes = drivingRoute ? drivingRoute.durationMinutes : 0;
 
+
                 setDistance(totalDistanceKm);
                 setDrivingDuration(totalDrivingDurationMinutes);
                 setResults(calculateRoutes(drivingRoute, bikingRoute, walkingRoute, totalDistanceKm, selectedVehicleType, evMode, fuelPrices));
+
 
             } catch (err) {
               console.error('Error calculating route:', err);
@@ -1163,18 +1396,19 @@
             }
           };
 
+
           // Loads a favorite route into the input fields.
           const loadFavoriteRoute = (favorite) => {
             setStartLocation(favorite.startLocation);
             setEndLocation(favorite.endLocation);
             setWaypoints(favorite.waypoints || []);
-            // Clear coordinates to force re-geocoding on next submit
-            setStartCoords(null);
+            setStartCoords(null); // Clear coords to force re-geocoding on next submit
             setEndCoords(null);
             setWaypointCoords([]);
-            setError(null); // Clear any previous errors
-            setResults([]); // Clear previous results
+            setError(null);
+            setResults([]);
           };
+
 
           // Calls the save favorite function exposed by the FavoriteRoutes component.
           const handleSaveCurrentRoute = () => {
@@ -1185,15 +1419,21 @@
             }
           };
 
+
+          // State for avoidances
+          const [avoidTolls, setAvoidTolls] = useState(false);
+          const [avoidHighways, setAvoidHighways] = useState(false);
+
+
           // Determine the most eco-friendly option based on CO2 emissions
           const lowestCo2Option = results.length > 0
             ? results.reduce((prev, current) => {
-                // If a mode is not possible (time === Infinity), it's not the "best" eco option
                 if (prev.time === Infinity) return current;
                 if (current.time === Infinity) return prev;
                 return (prev.co2 < current.co2 ? prev : current);
               }).mode
             : null;
+
 
           // Helper to get Tailwind CSS classes for card background based on mode
           const getModeColor = (mode) => {
@@ -1206,16 +1446,18 @@
             }
           };
 
+
           // Helper to get an emoji icon for each mode
           const getModeIcon = (mode) => {
             switch (mode) {
               case 'walking': return '🚶';
-              case 'biking': return '�';
+              case 'biking': return '🚴';
               case 'transit': return '🚌';
               case 'driving': return '🚗';
               default: return '?';
             }
           };
+
 
           return (
             <div className="min-h-screen bg-[#0d0d0d] font-sans antialiased text-[#e0e0e0] p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -1224,32 +1466,56 @@
                 <div className="lg:col-span-1 bg-[#1a1a1a] p-6 rounded-xl shadow-inner border border-[#222] flex flex-col space-y-6">
                   <h2 className="text-2xl font-bold text-[#e0e0e0] mb-4">Plan Your Eco Journey</h2>
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
+                    <div className="relative"> {/* Added relative for autocomplete positioning */}
                       <Label htmlFor="start" className="text-lg font-medium text-[#c0c0e0] mb-2 block">Start Location</Label>
                       <Input
                         id="start"
                         value={startLocation}
                         onChange={handleStartLocationChange}
+                        onFocus={() => setActiveInput('start')}
+                        onBlur={() => setTimeout(() => setStartSuggestions([]), 100)} // Hide after slight delay
                         placeholder="Enter starting point or click on map"
                       />
+                      {activeInput === 'start' && startSuggestions.length > 0 && (
+                        <div className="autocomplete-dropdown">
+                          {startSuggestions.map((s, i) => (
+                            <div key={i} className="autocomplete-item" onMouseDown={() => handleSelectSuggestion('start', s)}>
+                              {s.address}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div>
+                    <div className="relative"> {/* Added relative for autocomplete positioning */}
                       <Label htmlFor="end" className="text-lg font-medium text-[#c0c0e0] mb-2 block">End Location</Label>
                       <Input
                         id="end"
                         value={endLocation}
                         onChange={handleEndLocationChange}
+                        onFocus={() => setActiveInput('end')}
+                        onBlur={() => setTimeout(() => setEndSuggestions([]), 100)} // Hide after slight delay
                         placeholder="Enter destination or click on map"
                       />
+                      {activeInput === 'end' && endSuggestions.length > 0 && (
+                        <div className="autocomplete-dropdown">
+                          {endSuggestions.map((s, i) => (
+                            <div key={i} className="autocomplete-item" onMouseDown={() => handleSelectSuggestion('end', s)}>
+                              {s.address}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {/* Waypoints section */}
                     <div className="space-y-4 border-t border-b border-[#222] py-4">
                       <h3 className="text-xl font-semibold text-[#e0e0e0]">Waypoints (Optional)</h3>
                       {waypoints.map((waypoint, index) => (
-                        <div key={waypoint.id} className="flex items-center gap-3">
+                        <div key={waypoint.id} className="flex items-center gap-3 relative">
                           <Input
                             value={waypoint.location}
                             onChange={(e) => handleWaypointLocationChange(index, e)}
+                            onFocus={() => setActiveInput(`waypoint-${index}`)}
+                            onBlur={() => setTimeout(() => waypointSuggestionsRef.current[index] && waypointSuggestionsRef.current[index][1]([]), 100)}
                             placeholder={`Waypoint ${String(index + 1)} or click on map`}
                             className="flex-grow"
                           />
@@ -1262,6 +1528,15 @@
                           >
                             ✖
                           </Button>
+                          {activeInput === `waypoint-${index}` && waypointSuggestionsRef.current[index] && waypointSuggestionsRef.current[index][0].length > 0 && (
+                            <div className="autocomplete-dropdown">
+                              {waypointSuggestionsRef.current[index][0].map((s, i) => (
+                                <div key={i} className="autocomplete-item" onMouseDown={() => handleSelectSuggestion(`waypoint-${index}`, s)}>
+                                  {s.address}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                       <Button
@@ -1300,6 +1575,30 @@
                           <option value="electric">Electric Car</option>
                         </select>
                       </div>
+                    </div>
+                    {/* Avoidances */}
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-semibold text-[#e0e0e0]">Route Preferences</h3>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="avoidTolls"
+                                checked={avoidTolls}
+                                onChange={(e) => setAvoidTolls(e.target.checked)}
+                                className="h-5 w-5 text-[#4CAF50] rounded border-[#444] focus:ring-[#4CAF50]"
+                            />
+                            <Label htmlFor="avoidTolls" className="text-base text-[#c0c0e0]">Avoid Tolls</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="avoidHighways"
+                                checked={avoidHighways}
+                                onChange={(e) => setAvoidHighways(e.target.checked)}
+                                className="h-5 w-5 text-[#4CAF50] rounded border-[#444] focus:ring-[#4CAF50]"
+                            />
+                            <Label htmlFor="avoidHighways" className="text-base text-[#c0c0e0]">Avoid Highways</Label>
+                        </div>
                     </div>
                     <div className="flex flex-col gap-4 mt-6">
                       <Button
@@ -1343,6 +1642,7 @@
                   <FavoriteRoutes onLoadRoute={loadFavoriteRoute} onSaveRoute={saveFavoriteRouteRef} />
                 </div>
 
+
                 {/* Main Content Area (Map and Results) */}
                 <div className="lg:col-span-3 flex flex-col space-y-6">
                   {error ? (
@@ -1355,6 +1655,7 @@
                   <p className="text-center text-sm text-[#a0a0c0]">
                     Click on the map to set Start and End locations, or type them in the fields above. Click again to add waypoints.
                   </p>
+
 
                   {(distance !== null && drivingDuration !== null) ? (
                     <div className="p-4 bg-[#1a1a1a] border border-[#4CAF50] rounded-lg text-center shadow-sm">
@@ -1372,9 +1673,12 @@
                     </div>
                   ) : null}
 
+
                   {results.length > 0 ? <RouteComparisonChart results={results} /> : null}
 
+
                   {results.length > 0 ? <CarbonSavingsCalculator results={results} /> : null}
+
 
                   {results.length > 0 ? (
                     <MultiModalSuggestions
@@ -1384,12 +1688,30 @@
                     />
                   ) : null}
 
+
                   {results.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {results.map((result) => (
                         <Card
                           key={result.mode + (result.vehicleType || '')}
                           className={`transition-all duration-300 ease-in-out ${getModeColor(result.mode)} ${lowestCo2Option === result.mode ? 'ring-highlight' : 'border-2'} ${result.time === Infinity ? 'opacity-50 grayscale' : ''} cursor-pointer hover:shadow-lg`}
+                          onMouseEnter={() => {
+                            if (mapRef.current && routeLayersRef.current[result.mode]) {
+                              routeLayersRef.current[result.mode].setStyle({ weight: 8, opacity: 1 }); // Highlight on hover
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            if (mapRef.current && routeLayersRef.current[result.mode]) {
+                              let weight = 4;
+                              switch (result.mode) {
+                                case 'driving': weight = 5; break;
+                                case 'biking': weight = 4; break;
+                                case 'walking': weight = 3; break;
+                                case 'transit': weight = 4; break;
+                              }
+                              routeLayersRef.current[result.mode].setStyle({ weight: weight, opacity: 0.7 }); // Reset style
+                            }
+                          }}
                         >
                           <CardHeader className="flex flex-row items-center justify-between p-4 pb-2">
                             <CardTitle className="capitalize text-[#e0e0e0]">
@@ -1418,6 +1740,7 @@
                     </div>
                   ) : null}
 
+
                   {lowestCo2Option ? (
                     <div className="p-5 bg-[#1a1a1a] border border-[#4CAF50] text-[#e0e0e0] rounded-xl text-center shadow-lg">
                       <p className="font-extrabold text-2xl text-[#4CAF50] mb-2">
@@ -1430,6 +1753,7 @@
                       </p>
                     </div>
                   ) : null}
+
 
                   {/* Newsletter Signup Section */}
                   <div className="newsletter-section mt-8">
@@ -1457,6 +1781,7 @@
           );
         }
 
+
         // Render your React App
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(
@@ -1465,4 +1790,4 @@
     </script>
 </body>
 </html>
-�
+
