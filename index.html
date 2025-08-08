@@ -1727,7 +1727,7 @@
                               <p><span>Eco Points:</span> {` ${String(result.points)}`}</p>
                             </div>
                             {result.time !== Infinity ? (
-                              <RouteDetailsPanel
+                              <RouteDetailsPanel 
                                 route={result}
                                 isExpanded={expandedRoute === result.mode}
                                 onToggle={() => setExpandedRoute(expandedRoute === result.mode ? null : result.mode)}
