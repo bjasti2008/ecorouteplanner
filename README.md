@@ -1,7 +1,7 @@
-Eco Route Planner 🌱
+Eco Route Planner 
 Welcome to the Eco Route Planner! This web application helps you plan your journeys by comparing different transportation modes based on their estimated CO₂ emissions, time, and cost. Make greener travel choices and contribute to a more sustainable future.
 
-✨ Features
+Features
 Advanced Geocoding & Autocomplete: Easily find start, end, and waypoint locations with intelligent address suggestions powered by Geoapify.
 Reverse Geocoding on Map Clicks: Click anywhere on the map to instantly get a human-readable address for that location.
 Multi-Modal Routing: Compare routes for driving (Gasoline, Hybrid, Electric), biking, walking, and public transit.
@@ -19,7 +19,7 @@ Carbon Savings Calculator: Quantify your positive environmental impact by showin
 Weather Impact: Get current weather conditions for your starting location with basic warnings for walking/biking in adverse weather.
 Responsive Design: Enjoy a seamless experience on both desktop and mobile devices.
 
-🚀 Getting Started
+Getting Started
 This project is designed as a single HTML file for simplicity, leveraging CDN links for React, Leaflet, Tailwind CSS, and external APIs.
 Prerequisites
 To run this application and utilize its full features, you will need API keys for the following services:
@@ -45,7 +45,7 @@ const GEOAPIFY_API_KEY = 'YOUR_GEOAPIFY_API_KEY_HERE';
 // Fuel Price API Key (e.g., from CollectAPI)
 const FUEL_PRICE_API_KEY = 'YOUR_COLLECTAPI_KEY_HERE';
 
-💡 Usage
+Usage
 Set Locations:
 Type your "Start Location" and "End Location" into the input fields. Autocomplete suggestions will appear as you type.
 Alternatively, click directly on the map to set your start, end, and subsequent waypoint locations.
@@ -59,7 +59,7 @@ View Details: Click "Show Details" on any route card to see step-by-step directi
 Save/Load Favorites: Use the "Save Route" button to store your current route, and load previously saved routes from the "Favorite Routes" section.
 Use Current Location: Click "Use My Current Location" to automatically set your starting point.
 
-🛠️ Technologies Used
+Technologies Used
 React: For building the user interface.
 Leaflet.js: An open-source JavaScript library for interactive maps.
 Tailwind CSS: A utility-first CSS framework for rapid styling.
@@ -68,7 +68,7 @@ CollectAPI: For fetching real-time fuel prices.
 Open-Meteo API: For current weather data.
 Babel Standalone: For transpiling JSX directly in the browser.
 
-🤝 Contributing
+Contributing
 Contributions are welcome! If you have ideas for new features, improvements, or bug fixes, please feel free to:
 Fork the repository.
 Create a new branch (git checkout -b feature/your-feature-name).
@@ -77,5 +77,5 @@ Commit your changes (git commit -m 'Add new feature').
 Push to the branch (git push origin feature/your-feature-name).
 Open a Pull Request.
 
-📄 License
+License
 This project is open-source and available under the MIT License.
